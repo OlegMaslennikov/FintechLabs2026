@@ -7,9 +7,7 @@ contract SimpleAuction {
     address public highestBidder;
     uint256 public auctionEndTime;
     bool public ended;
-
     mapping(address => uint256) public pendingReturns;
-
     event NewBid(address indexed bidder, uint256 amount);
     event AuctionFinished(address winner, uint256 amount);
     event Refunded(address indexed bidder, uint256 amount);
