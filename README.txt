@@ -1,28 +1,36 @@
-REMIX DEFAULT WORKSPACE
 
-Remix default workspace is present when:
-i. Remix loads for the very first time 
-ii. A new workspace is created with 'Default' template
-iii. There are no files existing in the File Explorer
+### Сдача лабораторной работы № 3 «Аукцион»
 
-This workspace contains 3 directories:
+Репозиторий курса: https://github.com/OlegMaslennikov/FintechLabs2026
 
-1. 'contracts': Holds three contracts with increasing levels of complexity.
-2. 'scripts': Contains four typescript files to deploy a contract. It is explained below.
-3. 'tests': Contains one Solidity test file for 'Ballot' contract & one JS test file for 'Storage' contract.
 
-SCRIPTS
 
-The 'scripts' folder has two typescript files which help to deploy the 'Storage' contract using 'ethers.js' libraries.
+1. Отправь свой username старосте. Прими приглашение преподавателя к работе с репозиторием.
+2. Склонируй репозиторий на свой компьютер:
 
-For the deployment of any other contract, just update the contract name from 'Storage' to the desired contract and provide constructor arguments accordingly 
-in the file `deploy_with_ethers.ts`
+   ```bash
+   git clone https://github.com/OlegMaslennikov/FintechLabs2026.git
+   cd FintechLabs2026
+   ```
 
-In the 'tests' folder there is a script containing Mocha-Chai unit tests for 'Storage' contract.
+3. Создай собственную ветку. Вместо `ivanov-ivan` укажи свою фамилию и имя латиницей:
 
-To run a script, right click on file name in the file explorer and click 'Run'. Remember, Solidity file must already be compiled.
-Output from script will appear in remix terminal.
+   ```bash
+   git checkout -b lab3-ivanov-ivan
+   ```
 
-Please note, require/import is supported in a limited manner for Remix supported modules.
-For now, modules supported by Remix are ethers, swarmgw, chai, multihashes, remix and hardhat only for hardhat.ethers object/plugin.
-For unsupported modules, an error like this will be thrown: '<module_name> module require is not supported by Remix IDE' will be shown.
+4. Выполни работу в папке `Lab3_Auction/`. Не изменяй файлы других лабораторных работ и не отправляй изменения непосредственно в `main`.
+
+5. Добавь свою работу в Git:
+
+   ```bash
+   git add Lab3_Auction/
+   git commit -m "Lab 3 - Ivanov Ivan"
+   git push -u origin lab3-ivanov-ivan
+   ```
+
+6. Открой репозиторий на GitHub. Нажми **Compare & pull request**, если GitHub предложит эту кнопку, и создай Pull Request в ветку `main`.
+
+7. Назови запрос `Lab 3 — Иванов Иван` и дождись проверки преподавателем.
+
+Если потребуются исправления, внеси их в ту же ветку, сделай новый коммит и отправь его командой `git push`. Создавать новый Pull Request не нужно.
