@@ -1,69 +1,91 @@
-pragma solidity ^0.8.0;
+ // SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
 
 contract SimpleAuction {
-    address payable public owner;
-    string public itemName;
+    address public immutable auctioneer;
+    string public lotName;
     uint256 public highestBid;
     address public highestBidder;
     uint256 public auctionEndTime;
-    bool public ended;
+    bool public isFinished;
 
+    mapping(address => uint256) public bids;
     mapping(address => uint256) public pendingReturns;
 
     event NewBid(address indexed bidder, uint256 amount);
-    event AuctionFinished(address winner, uint256 amount);
+    event AuctionFinished(address winner, uint256 highestBid);
     event Refunded(address indexed bidder, uint256 amount);
 
-    constructor(string memory _itemName, uint256 _durationDays) {
-        owner = payable(msg.sender);
-        itemName = _itemName;
-        auctionEndTime = block.timestamp + (_durationDays * 1 days);
+    modifier onlyAuctioneer() {
+        require(msg.sender == auctioneer, "Only auctioneer can call this");
+        _;
     }
 
-    function bid() public payable {
-        require(!isExpired(), "Auction already ended");
-        require(msg.value > 0, "Bid must be greater than zero");
-        require(msg.value > highestBid, "There already is a higher bid");
+    constructor(string memory _lotName, uint256 _durationInDays) {
+        require(_durationInDays > 0, "Duration must be positive");
 
-        if (highestBid != 0) {
+        auctioneer = msg.sender;
+        lotName = _lotName;
+        auctionEndTime = block.timestamp + (_durationInDays * 1 days);
+    }
+
+    function bid() external payable {
+        require(block.timestamp < auctionEndTime, "Auction already ended");
+        require(!isFinished, "Auction is already finished");
+        require(msg.value > 0, "Bid must be greater than zero");
+
+        uint256 newBid = msg.value + pendingReturns[msg.sender];
+
+        if (msg.sender == highestBidder) {
+            newBid += highestBid;
+        }
+
+        require(newBid > highestBid, "There already is a higher bid");
+
+        if (highestBidder != address(0) && highestBidder != msg.sender) {
             pendingReturns[highestBidder] += highestBid;
         }
 
+        pendingReturns[msg.sender] = 0;
+
         highestBidder = msg.sender;
-        highestBid = msg.value;
-        emit NewBid(msg.sender, msg.value);
+        highestBid = newBid;
+        bids[msg.sender] = newBid;
+
+        emit NewBid(msg.sender, newBid);
     }
 
-    function finishAuction() public {
-        require(msg.sender == owner, "Only owner can finish the auction");
-        require(isExpired(), "Auction not yet ended");
-        require(!ended, "Auction finish already called");
+    function finishAuction() external onlyAuctioneer {
+        require(block.timestamp >= auctionEndTime, "Auction time not expired yet");
+        require(!isFinished, "finishAuction has already been called");
 
-        ended = true;
+        isFinished = true;
+
         emit AuctionFinished(highestBidder, highestBid);
 
         if (highestBid > 0) {
-            (bool success, ) = owner.call{value: highestBid}("");
-            require(success, "Transfer failed");
+            (bool success, ) = payable(auctioneer).call{value: highestBid}("");
+            require(success, "Transfer to auctioneer failed");
         }
     }
 
-    function refund() public {
+    function refund() external {
         uint256 amount = pendingReturns[msg.sender];
         require(amount > 0, "No funds to refund");
 
         pendingReturns[msg.sender] = 0;
 
-        (bool success, ) = msg.sender.call{value: amount}("");
-        require(success, "Transfer failed");
+        (bool success, ) = payable(msg.sender).call{value: amount}("");
+        require(success, "Refund transfer failed");
+
         emit Refunded(msg.sender, amount);
     }
 
-    function getBalance() public view returns (uint256) {
+    function getBalance() external view returns (uint256) {
         return address(this).balance;
     }
 
-    function isExpired() public view returns (bool) {
+    function isExpired() external view returns (bool) {
         return block.timestamp >= auctionEndTime;
     }
 }
