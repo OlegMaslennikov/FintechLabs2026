@@ -1,73 +1,91 @@
-// SPDX-License-Identifier: MIT
-pragma solidity >=0.7.0 <0.9.0;
+ // SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
 
 contract SimpleAuction {
-    address public owner;                 
-    string public lotName;                
-    uint256 public highestBid;            
-    address public highestBidder;         
-    uint256 public auctionEndTime;        
-    bool public ended;                    
+    address public immutable auctioneer;
+    string public lotName;
+    uint256 public highestBid;
+    address public highestBidder;
+    uint256 public auctionEndTime;
+    bool public isFinished;
 
     mapping(address => uint256) public bids;
+    mapping(address => uint256) public pendingReturns;
 
     event NewBid(address indexed bidder, uint256 amount);
-    event AuctionFinished(address winner, uint256 amount);
+    event AuctionFinished(address winner, uint256 highestBid);
     event Refunded(address indexed bidder, uint256 amount);
 
+    modifier onlyAuctioneer() {
+        require(msg.sender == auctioneer, "Only auctioneer can call this");
+        _;
+    }
+
     constructor(string memory _lotName, uint256 _durationInDays) {
-        owner = msg.sender;
+        require(_durationInDays > 0, "Duration must be positive");
+
+        auctioneer = msg.sender;
         lotName = _lotName;
         auctionEndTime = block.timestamp + (_durationInDays * 1 days);
     }
 
     function bid() external payable {
-        require(block.timestamp < auctionEndTime, "Auction already expired");
-        require(!ended, "Auction already finished");
+        require(block.timestamp < auctionEndTime, "Auction already ended");
+        require(!isFinished, "Auction is already finished");
         require(msg.value > 0, "Bid must be greater than zero");
-        require(msg.value > highestBid, "There already is a higher bid");
 
-        if (highestBidder != address(0)) {
-            bids[highestBidder] += highestBid;
+        uint256 newBid = msg.value + pendingReturns[msg.sender];
+
+        if (msg.sender == highestBidder) {
+            newBid += highestBid;
         }
 
-        highestBidder = msg.sender;
-        highestBid = msg.value;
+        require(newBid > highestBid, "There already is a higher bid");
 
-        emit NewBid(msg.sender, msg.value);
+        if (highestBidder != address(0) && highestBidder != msg.sender) {
+            pendingReturns[highestBidder] += highestBid;
+        }
+
+        pendingReturns[msg.sender] = 0;
+
+        highestBidder = msg.sender;
+        highestBid = newBid;
+        bids[msg.sender] = newBid;
+
+        emit NewBid(msg.sender, newBid);
+    }
+
+    function finishAuction() external onlyAuctioneer {
+        require(block.timestamp >= auctionEndTime, "Auction time not expired yet");
+        require(!isFinished, "finishAuction has already been called");
+
+        isFinished = true;
+
+        emit AuctionFinished(highestBidder, highestBid);
+
+        if (highestBid > 0) {
+            (bool success, ) = payable(auctioneer).call{value: highestBid}("");
+            require(success, "Transfer to auctioneer failed");
+        }
     }
 
     function refund() external {
-        uint256 amount = bids[msg.sender];
-        require(amount > 0, "No funds available for refund");
+        uint256 amount = pendingReturns[msg.sender];
+        require(amount > 0, "No funds to refund");
 
-        bids[msg.sender] = 0;
+        pendingReturns[msg.sender] = 0;
 
-        (bool success, ) = msg.sender.call{value: amount}("");
-        require(success, "ETH transfer failed");
+        (bool success, ) = payable(msg.sender).call{value: amount}("");
+        require(success, "Refund transfer failed");
 
         emit Refunded(msg.sender, amount);
     }
 
-    function finishAuction() external {
-        require(msg.sender == owner, "Only owner can finish auction");
-        require(block.timestamp >= auctionEndTime, "Auction has not ended yet");
-        require(!ended, "Auction finish already called");
-
-        ended = true;
-        emit AuctionFinished(highestBidder, highestBid);
-
-        if (highestBid > 0) {
-            (bool success, ) = owner.call{value: highestBid}("");
-            require(success, "Failed to send ETH to owner");
-        }
+    function getBalance() external view returns (uint256) {
+        return address(this).balance;
     }
 
     function isExpired() external view returns (bool) {
         return block.timestamp >= auctionEndTime;
-    }
-
-    function getBalance() external view returns (uint256) {
-        return address(this).balance;
     }
 }
