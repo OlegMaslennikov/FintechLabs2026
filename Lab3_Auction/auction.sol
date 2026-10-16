@@ -1,91 +1,86 @@
+
  // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-contract SimpleAuction {
-    address public immutable auctioneer;
-    string public lotName;
-    uint256 public highestBid;
-    address public highestBidder;
-    uint256 public auctionEndTime;
-    bool public isFinished;
+contract AuctionHouse {
+    address payable public auctionOwner;
+    string public product;
+    uint256 public currentBid;
+    address public currentWinner;
+    uint256 public auctionDeadline;
+    bool public auctionClosed;
 
-    mapping(address => uint256) public bids;
-    mapping(address => uint256) public pendingReturns;
+    mapping(address => uint256) public userBids;
+    mapping(address => uint256) public refunds;
 
-    event NewBid(address indexed bidder, uint256 amount);
-    event AuctionFinished(address winner, uint256 highestBid);
-    event Refunded(address indexed bidder, uint256 amount);
+    event BidPlaced(address indexed bidder, uint256 value);
+    event AuctionClosed(address indexed winner, uint256 value);
+    event RefundIssued(address indexed bidder, uint256 value);
 
-    modifier onlyAuctioneer() {
-        require(msg.sender == auctioneer, "Only auctioneer can call this");
-        _;
+    constructor(string memory _product, uint256 _durationDays) {
+        require(bytes(_product).length != 0, "Product name required");
+        require(_durationDays != 0, "Invalid duration");
+
+        auctionOwner = payable(msg.sender);
+        product = _product;
+        auctionDeadline = block.timestamp + (_durationDays * 1 days);
     }
 
-    constructor(string memory _lotName, uint256 _durationInDays) {
-        require(_durationInDays > 0, "Duration must be positive");
+    function placeBid() external payable {
+        require(block.timestamp < auctionDeadline, "Auction expired");
+        require(!auctionClosed, "Auction is closed");
+        require(msg.sender != auctionOwner, "Owner cannot participate");
+        require(msg.value > currentBid, "Bid is too low");
 
-        auctioneer = msg.sender;
-        lotName = _lotName;
-        auctionEndTime = block.timestamp + (_durationInDays * 1 days);
-    }
+        address previousWinner = currentWinner;
 
-    function bid() external payable {
-        require(block.timestamp < auctionEndTime, "Auction already ended");
-        require(!isFinished, "Auction is already finished");
-        require(msg.value > 0, "Bid must be greater than zero");
-
-        uint256 newBid = msg.value + pendingReturns[msg.sender];
-
-        if (msg.sender == highestBidder) {
-            newBid += highestBid;
+        if (previousWinner != address(0)) {
+            refunds[previousWinner] += currentBid;
         }
 
-        require(newBid > highestBid, "There already is a higher bid");
+        userBids[msg.sender] = msg.value;
+        currentWinner = msg.sender;
+        currentBid = msg.value;
 
-        if (highestBidder != address(0) && highestBidder != msg.sender) {
-            pendingReturns[highestBidder] += highestBid;
-        }
-
-        pendingReturns[msg.sender] = 0;
-
-        highestBidder = msg.sender;
-        highestBid = newBid;
-        bids[msg.sender] = newBid;
-
-        emit NewBid(msg.sender, newBid);
+        emit BidPlaced(msg.sender, msg.value);
     }
 
-    function finishAuction() external onlyAuctioneer {
-        require(block.timestamp >= auctionEndTime, "Auction time not expired yet");
-        require(!isFinished, "finishAuction has already been called");
+    function closeAuction() external {
+        require(msg.sender == auctionOwner, "Not auction owner");
+        require(block.timestamp >= auctionDeadline, "Auction still active");
+        require(!auctionClosed, "Already closed");
 
-        isFinished = true;
+        auctionClosed = true;
 
-        emit AuctionFinished(highestBidder, highestBid);
+        uint256 winningAmount = currentBid;
 
-        if (highestBid > 0) {
-            (bool success, ) = payable(auctioneer).call{value: highestBid}("");
-            require(success, "Transfer to auctioneer failed");
+        emit AuctionClosed(currentWinner, winningAmount);
+
+        if (winningAmount != 0) {
+            (bool sent, ) = auctionOwner.call{value: winningAmount}("");
+            require(sent, "Payment failed");
         }
     }
 
-    function refund() external {
-        uint256 amount = pendingReturns[msg.sender];
-        require(amount > 0, "No funds to refund");
+    function withdrawRefund() external {
+        uint256 refundAmount = refunds[msg.sender];
 
-        pendingReturns[msg.sender] = 0;
+        require(refundAmount > 0, "No refund available");
 
-        (bool success, ) = payable(msg.sender).call{value: amount}("");
-        require(success, "Refund transfer failed");
+        refunds[msg.sender] = 0;
 
-        emit Refunded(msg.sender, amount);
+        (bool sent, ) = payable(msg.sender).call{value: refundAmount}("");
+        require(sent, "Refund transfer failed");
+
+        emit RefundIssued(msg.sender, refundAmount);
     }
 
-    function getBalance() external view returns (uint256) {
+    function contractBalance() external view returns (uint256) {
         return address(this).balance;
     }
 
-    function isExpired() external view returns (bool) {
-        return block.timestamp >= auctionEndTime;
+    function hasExpired() public view returns (bool) {
+        return block.timestamp >= auctionDeadline;
     }
 }
+
