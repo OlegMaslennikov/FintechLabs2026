@@ -26,7 +26,7 @@ contract SimpleAuction {
         require(msg.value > highestBid, "Bid not high enough");
         require(msg.value > 0, "Bid must be > 0");
 
-        if (highestBidder != address(0)) {
+        if (highestBidder != address(0) && highestBidder != msg.sender) {
             bids[highestBidder] += highestBid;
         }
 
